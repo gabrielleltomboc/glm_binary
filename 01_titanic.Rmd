@@ -1,0 +1,91 @@
+---
+title: "<span style='font-family: Georgia; font-weight: bold; color: goldenrod'>Titanic GLM</span>"
+author: "<span style='font-family: Georgia;'>Gabrielle</span>"
+date: "<span style='font-family: Georgia; '>`r format(Sys.Date(), '%B %d, %Y')`</span>"
+output:
+  html_document:
+    theme: "flatly"
+    highlight: "tango"
+---
+
+```{r setup, include=FALSE}
+options(scipen = 1, digits = 2) #changes outputs to to decimal places.
+packages_needed <- c("ggplot2", # graphics
+                     "arm", # display() etc.
+                     "ggfortify", # check model assumptions
+                     "AICcmodavg", #average AIC models
+                     "grid" #arrange objects
+                     )
+pk_to_install <- packages_needed [!( packages_needed %in% rownames(installed.packages())  )]
+if(length(pk_to_install)>0 ){
+  install.packages(pk_to_install,repos="http://cran.r-project.org")
+}
+#lapply(packages_needed, require, character.only = TRUE)
+library(ggplot2)
+library(arm)
+library(ggfortify)
+library(AICcmodavg)
+library(grid)
+```
+
+<img src="titanic.png.jpg" style="width:100%; height:360px; display:block; margin:auto;">
+
+```{r}
+titanic_df <- as.data.frame(Titanic)
+head(titanic_df)
+titanic_all <- titanic_df[rep(1:nrow(titanic_df), titanic_df$Freq), -5] #makes individuals instead of groups
+titanic_all$Survived <- ifelse(titanic_all$Survived == "Yes", 1, 0) #1 survived, 0 died
+str(titanic_all$Age) #shows age is a factor
+set.seed(123)
+
+titanic_all$Age_numbers <- ifelse(
+  titanic_all$Age == "Child",
+runif(nrow(titanic_all), min = 1, max = 13),
+runif(nrow(titanic_all), min = 18, max = 64)
+)
+titanic_all$Survived_prob <- ifelse(
+  titanic_all$Age_numbers <= 12, 0.75, 0.3
+)
+titanic_all$Survived <- rbinom(nrow(titanic_all), size = 1, prob = titanic_all$Survived_prob)
+```
+
+```{r}
+set.seed(123)
+titanic_sample <- titanic_all[sample(nrow(titanic_all), 100),]
+
+ggplot() +
+  geom_point(data = titanic_sample, aes(x =Age_numbers, y = Survived), size = 3, color = "goldenrod") +
+  geom_smooth(data = titanic_all, aes(x = Age_numbers, y = Survived), method="glm", method.args=list(family=binomial(link="logit")), se = TRUE, color = "darkred"
+) +
+  labs(title="GLM binomial count (0/1)") +
+  ylab ("Probability of Survival") +
+  xlab ("Age")
+```
+```{r}
+model_titanic <- glm(Survived ~ Age_numbers, data = titanic_all, family=binomial)
+model_titanic
+```
+
+As age increases, the chances of survival decreases. The slope of -0.0147 indicates that every year an individual is older, the log-odds of survival decreases by 0.0147.
+
+```{r}
+library(arm)
+x <- predict(model_titanic)
+y <- resid(model_titanic)
+binnedplot(x, y, col.pts = "goldenrod", col.int = "darkred")
+```
+
+The red lines in the plot indicate ±2 standard errors, within which approximately 95% of the binned residuals are expected to fall.
+
+```{r}
+coef(model_titanic)
+```
+```{r}
+confint(model_titanic)
+```
+-0.015/4 = -0.00375 * 100 = -0.375%. For every 1 year increase in age, the probability of surviving decreases by 0.38%. Children are more likley to survive than adults.
+
+```{r}
+summary(model_titanic)
+```
+Because the p-value = 1.8e-06, this indicates age is a significant predictor in survial rates.
